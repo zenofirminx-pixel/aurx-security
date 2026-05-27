@@ -1,10 +1,5 @@
-// core/memoryShort.js
-
 const shortMemory = new Map();
 
-/**
- * récupère ou crée la mémoire d'une IP
- */
 function get(ip) {
   if (!shortMemory.has(ip)) {
     shortMemory.set(ip, []);
@@ -12,52 +7,48 @@ function get(ip) {
   return shortMemory.get(ip);
 }
 
-/**
- * ajoute une requête + nettoie les anciennes (>10s)
- */
 export function addRequest(ip) {
   const now = Date.now();
-  let data = get(ip);
+
+  const data = get(ip);
 
   data.push(now);
 
-  // garder seulement les 10 dernières secondes
-  data = data.filter((t) => now - t <= 10000);
+  // clean safe
+  const cleaned = data.filter((t) => now - t <= 10000);
 
-  shortMemory.set(ip, data);
+  shortMemory.set(ip, cleaned);
 
-  return data;
+  return cleaned;
 }
 
-/**
- * retourne les stats de l'IP
- */
 export function getStats(ip) {
-  const data = get(ip);
+  const data = get(ip) || [];
 
-  let avgInterval = 0;
-
-  if (data.length > 1) {
-    const intervals = [];
-
-    for (let i = 1; i < data.length; i++) {
-      intervals.push(data[i] - data[i - 1]);
-    }
-
-    avgInterval =
-      intervals.reduce((a, b) => a + b, 0) / intervals.length;
+  if (data.length < 2) {
+    return {
+      count: data.length,
+      avgInterval: 0,
+      timestamps: data,
+    };
   }
+
+  let sum = 0;
+
+  for (let i = 1; i < data.length; i++) {
+    const diff = data[i] - data[i - 1];
+    sum += diff;
+  }
+
+  const avgInterval = sum / (data.length - 1);
 
   return {
     count: data.length,
+    avgInterval: isNaN(avgInterval) ? 0 : avgInterval,
     timestamps: data,
-    avgInterval,
   };
 }
 
-/**
- * reset si besoin
- */
 export function reset(ip) {
   shortMemory.delete(ip);
 }
