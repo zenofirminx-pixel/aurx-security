@@ -13,11 +13,8 @@ export default async function handler(req, res) {
 
     const message = body.message;
 
-    if (typeof message !== "string" || message.trim() === "") {
-      return res.status(400).json({
-        status: "error",
-        reason: "message invalide",
-      });
+    if (typeof message !== "string" || !message.trim()) {
+      return res.status(400).json({ error: "invalid message" });
     }
 
     const ip =
@@ -25,12 +22,14 @@ export default async function handler(req, res) {
       req.socket?.remoteAddress ||
       "unknown";
 
+    // 📊 tracking
     try {
       addRequest(ip);
     } catch {}
 
     const stats = getStats(ip) || { count: 0, avgInterval: 0 };
 
+    // 🧠 decision engine
     let decision = { status: "ok" };
 
     try {
@@ -43,47 +42,28 @@ export default async function handler(req, res) {
     } catch {}
 
     if (decision.status === "blocked") {
-      return res.status(403).json({
-        status: "blocked",
-        reason: decision.reason,
-      });
+      return res.status(403).json({ status: "blocked" });
     }
 
     if (decision.status === "abuse") {
-      return res.status(429).json({
-        status: "limited",
-        reason: decision.reason,
-      });
+      return res.status(429).json({ status: "limited" });
     }
 
-    // 🚀 STREAM PROXY MODE (IMPORTANT)
+    // 🚀 STREAM PASS THROUGH
     const response = await fetch(AI_BACKEND, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        message,
-        ip,
-        stats,
-      }),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message, ip, stats }),
     });
 
-    // ❗ PAS DE JSON, ON RELAIS LE STREAM BRUT
-    if (!response.ok || !response.body) {
-      return res.status(500).json({
-        status: "error",
-        reason: "backend stream error",
-      });
+    if (!response.body) {
+      return res.status(500).json({ error: "no stream" });
     }
 
-    // 🔥 HEADERS STREAM
-    res.setHeader("Content-Type", response.headers.get("content-type") || "text/plain");
-    res.setHeader("Cache-Control", "no-cache");
-    res.setHeader("Connection", "keep-alive");
+    res.setHeader("Content-Type", "text/plain");
 
     const reader = response.body.getReader();
-    const decoder = new TextDecoder("utf-8");
+    const decoder = new TextDecoder();
 
     while (true) {
       const { value, done } = await reader.read();
@@ -95,9 +75,6 @@ export default async function handler(req, res) {
     res.end();
 
   } catch (err) {
-    return res.status(500).json({
-      status: "error",
-      error: err.message,
-    });
+    res.status(500).json({ error: err.message });
   }
 }
