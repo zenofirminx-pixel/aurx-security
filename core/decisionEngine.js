@@ -1,59 +1,15 @@
-// core/decisionEngine.js
-
-import { setCooldown } from "../security/cooldowns.js";
-
-/**
- * Analyse les données du tracker
- */
-export function decisionEngine(data) {
-  const { ip, count, avgInterval } = data;
-
-  let status = "normal";
-  let cooldown = 0;
-  let reason = "ok";
-
-  // 🟡 SUSPECT
-  if (count >= 9 && count <= 15) {
-    status = "suspect";
-    reason = "activité rapide détectée";
+export function decisionEngine({ ip, count, avgInterval, rules }) {
+  if (count > rules.maxRequestsPerMinute) {
+    return { status: "abuse", reason: "rate limit" };
   }
 
-  // 🟠 ABUS
-  if (count >= 16 && count <= 22) {
-    status = "abuse";
-    cooldown = 60 * 1000; // 1 minute
-    reason = "abus probable détecté";
-
-    setCooldown(ip, cooldown);
+  if (avgInterval < rules.minIntervalMs) {
+    return { status: "abuse", reason: "too fast requests" };
   }
 
-  // 🔴 BLOCK
-  if (count >= 23) {
-    status = "blocked";
-    cooldown = 5 * 60 * 1000; // 5 minutes
-    reason = "spam/bot détecté";
-
-    setCooldown(ip, cooldown);
+  if (rules.blacklist?.includes(ip)) {
+    return { status: "blocked", reason: "blacklisted IP" };
   }
 
-  // 🧠 BONUS LOGIQUE (vitesse extrême)
-  if (avgInterval !== 0 && avgInterval < 150) {
-    // très rapide (moins de 150ms entre requêtes)
-    if (count >= 10) {
-      status = "abuse";
-      cooldown = 2 * 60 * 1000;
-      reason = "burst ultra rapide détecté";
-
-      setCooldown(ip, cooldown);
-    }
-  }
-
-  return {
-    ip,
-    status,
-    count,
-    avgInterval,
-    cooldown,
-    reason,
-  };
+  return { status: "ok" };
 }
