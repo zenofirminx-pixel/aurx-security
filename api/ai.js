@@ -1,29 +1,23 @@
-import gateway from "./gateway.js";
+const AI_BACKEND = "https://aur-x-backend.vercel.app/api/chat";
 
-/**
- * Endpoint IA AurX
- */
-export default function handler(req, res) {
-  // 🛡 sécurité obligatoire
-  const gate = gateway(req, res);
+export default async function handler(req, res) {
+  try {
+    const body =
+      typeof req.body === "string"
+        ? JSON.parse(req.body)
+        : req.body || {};
 
-  // si gateway bloque → arrêt
-  if (!gate || gate.blocked) return;
-
-  const { message } = req.body;
-
-  if (!message) {
-    return res.status(400).json({
-      error: "message manquant",
+    const response = await fetch(AI_BACKEND, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
     });
+
+    const data = await response.json();
+
+    res.status(200).json(data);
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
-
-  // 🤖 placeholder IA (plus tard remplacé par vrai moteur)
-  const response = `AurX répond à: ${message}`;
-
-  return res.status(200).json({
-    status: "ok",
-    input: message,
-    response,
-  });
 }
