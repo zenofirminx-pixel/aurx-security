@@ -1,54 +1,38 @@
-const shortMemory = new Map();
-
-function get(ip) {
-  if (!shortMemory.has(ip)) {
-    shortMemory.set(ip, []);
-  }
-  return shortMemory.get(ip);
-}
+const memory = new Map();
 
 export function addRequest(ip) {
   const now = Date.now();
 
-  const data = get(ip);
+  if (!memory.has(ip)) {
+    memory.set(ip, []);
+  }
 
-  data.push(now);
+  const arr = memory.get(ip);
+  arr.push(now);
 
-  // clean safe
-  const cleaned = data.filter((t) => now - t <= 10000);
+  // keep last 20 requests
+  if (arr.length > 20) arr.shift();
 
-  shortMemory.set(ip, cleaned);
-
-  return cleaned;
+  memory.set(ip, arr);
 }
 
 export function getStats(ip) {
-  const data = get(ip) || [];
+  const arr = memory.get(ip) || [];
 
-  if (data.length < 2) {
-    return {
-      count: data.length,
-      avgInterval: 0,
-      timestamps: data,
-    };
+  if (arr.length < 2) {
+    return { count: arr.length, avgInterval: 0 };
   }
 
-  let sum = 0;
-
-  for (let i = 1; i < data.length; i++) {
-    const diff = data[i] - data[i - 1];
-    sum += diff;
+  let intervals = [];
+  for (let i = 1; i < arr.length; i++) {
+    intervals.push(arr[i] - arr[i - 1]);
   }
 
-  const avgInterval = sum / (data.length - 1);
+  const avgInterval =
+    intervals.reduce((a, b) => a + b, 0) / intervals.length;
 
   return {
-    count: data.length,
-    avgInterval: isNaN(avgInterval) ? 0 : avgInterval,
-    timestamps: data,
+    count: arr.length,
+    avgInterval,
   };
-}
-
-export function reset(ip) {
-  shortMemory.delete(ip);
 }
