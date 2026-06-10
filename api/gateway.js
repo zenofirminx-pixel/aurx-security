@@ -13,31 +13,24 @@ export default async function handler(req, res) {
 
     const message = body.message;
 
-    if (!message) {
+    if (typeof message !== "string" || message.trim() === "") {
       return res.status(400).json({
         status: "error",
-        reason: "message manquant",
+        reason: "message invalide",
       });
     }
 
     const ip =
-      req.headers["x-forwarded-for"]?.split(",")[0] ||
+      req.headers["x-forwarded-for"]?.split(",")[0]?.trim() ||
       req.socket?.remoteAddress ||
       "unknown";
 
-    // 📡 TRACKING SAFE
     try {
       addRequest(ip);
-    } catch (e) {
-      console.log("memory error:", e.message);
-    }
+    } catch {}
 
-    const stats = getStats(ip) || {
-      count: 0,
-      avgInterval: 0,
-    };
+    const stats = getStats(ip) || { count: 0, avgInterval: 0 };
 
-    // 🧠 DECISION ENGINE SAFE + RULES
     let decision = { status: "ok" };
 
     try {
@@ -45,13 +38,10 @@ export default async function handler(req, res) {
         ip,
         count: stats.count,
         avgInterval: stats.avgInterval,
-        rules: RULES, // 🔥 on injecte rules ici
+        rules: RULES,
       });
-    } catch (e) {
-      console.log("decision error:", e.message);
-    }
+    } catch {}
 
-    // ⛔ BLOCK
     if (decision.status === "blocked") {
       return res.status(403).json({
         status: "blocked",
@@ -66,7 +56,7 @@ export default async function handler(req, res) {
       });
     }
 
-    // 🤖 AI CALL SAFE
+    // 🚀 STREAM PROXY MODE (IMPORTANT)
     const response = await fetch(AI_BACKEND, {
       method: "POST",
       headers: {
@@ -79,13 +69,30 @@ export default async function handler(req, res) {
       }),
     });
 
-    const data = await response.json();
+    // ❗ PAS DE JSON, ON RELAIS LE STREAM BRUT
+    if (!response.ok || !response.body) {
+      return res.status(500).json({
+        status: "error",
+        reason: "backend stream error",
+      });
+    }
 
-    return res.status(200).json({
-      status: "ok",
-      security: decision.status,
-      response: data,
-    });
+    // 🔥 HEADERS STREAM
+    res.setHeader("Content-Type", response.headers.get("content-type") || "text/plain");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder("utf-8");
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+
+      res.write(decoder.decode(value, { stream: true }));
+    }
+
+    res.end();
 
   } catch (err) {
     return res.status(500).json({
